@@ -1,0 +1,65 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+local isDriving = true -- ตั้งเป็น false เพื่อหยุดการทำงาน
+
+local function startAutoDrive()
+    local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local humanoid = character:WaitForChild("Humanoid")
+    
+    -- ตรวจสอบว่านั่งบนเบาะรถหรือไม่
+    local seat = humanoid.SeatPart
+    if not (seat and seat:IsA("VehicleSeat")) then
+        warn("กรุณานั่งที่เบาะคนขับก่อนรันสคริปต์!")
+        return
+    end
+
+    print("เริ่มระบบขับรถอัตโนมัติ...")
+
+    -- เชื่อมต่อการทำงานเข้ากับ Render Loop (ทำงานทุกเฟรม)
+    local connection
+    connection = RunService.Heartbeat:Connect(function()
+        if not isDriving or not humanoid.SeatPart then
+            seat.ThrottleFloat = 0
+            seat.SteerFloat = 0
+            connection:Disconnect()
+            print("ระบบขับรถอัตโนมัติหยุดทำงาน")
+            return
+        end
+
+        -- 1. เดินหน้าตลอดเวลา (ค่าระหว่าง 0 ถึง 1)
+        seat.ThrottleFloat = 1.0 
+
+        -- 2. ระบบ Raycast ตรวจจับสิ่งกีดขวางด้านหน้าและข้างๆ
+        local origin = seat.Position
+        local lookVector = seat.CFrame.LookVector
+        local rightVector = seat.CFrame.RightVector
+
+        local rayLength = 25 -- ระยะตรวจจับด้านหน้า
+        local sideRayLength = 15 -- ระยะตรวจจับด้านข้าง
+
+        -- ยิงลำแสงตรวจจับ
+        local rayForward = workspace:Raycast(origin, lookVector * rayLength)
+        local rayLeft = workspace:Raycast(origin, (lookVector - rightVector).Unit * sideRayLength)
+        local rayRight = workspace:Raycast(origin, (lookVector + rightVector).Unit * sideRayLength)
+
+        -- 3. คำนวณการเลี้ยว (Steer)
+        if rayLeft then
+            -- เจอสิ่งกีดขวางด้านซ้าย -> หักขวา
+            seat.SteerFloat = 1.0
+        elseif rayRight then
+            -- เจอสิ่งกีดขวางด้านขวา -> หักซ้าย
+            seat.SteerFloat = -1.0
+        elseif rayForward then
+            -- เจอสิ่งกีดขวางตรงหน้า -> เลี้ยวไปฝั่งที่ว่าง
+            seat.SteerFloat = 1.0 
+        else
+            -- ทางสะดวก -> วิ่งตรง
+            seat.SteerFloat = 0.0
+        end
+    end)
+end
+
+-- สั่งเริ่มทำงาน
+startAutoDrive()
